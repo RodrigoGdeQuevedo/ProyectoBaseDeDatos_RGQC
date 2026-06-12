@@ -48,6 +48,6 @@ for archivo in os.listdir(CARPETA_JSONS):
 # ==========================
 if documentos:
     catalogo.insert_many(documentos)
-    print(f"\n✅ {len(documentos)} documentos insertados en MongoDB")
+    print(f"\n{len(documentos)} documentos insertados en MongoDB")
 else:
-    print("\n⚠ No se insertó ningún documento")
+    print("\nNo se inserto ningun documento")
