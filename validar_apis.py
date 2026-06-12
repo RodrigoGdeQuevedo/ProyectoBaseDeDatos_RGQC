@@ -35,14 +35,14 @@ for app_id in APP_IDS:
 
         if str(app_id) in data and data[str(app_id)].get("success"):
             validos[app_id] = data[str(app_id)]["data"]["name"]
-            print(f"✅ {app_id} - OK")
+            print(f"{app_id} - OK")
         else:
             invalidos.append(app_id)
-            print(f"❌ {app_id} - NO EXISTE")
+            print(f"{app_id} - NO EXISTE")
 
     except Exception as e:
         invalidos.append(app_id)
-        print(f"⚠️ {app_id} - ERROR ({e})")
+        print(f"{app_id} - ERROR ({e})")
 
     time.sleep(0.8)  # importante para no ser rate-limited
 
@@ -54,5 +54,5 @@ with open("invalidos.json", "w", encoding="utf-8") as f:
     json.dump(invalidos, f, indent=4)
 
 print("\nProceso terminado.")
-print(f"Válidos: {len(validos)}")
-print(f"Inválidos: {len(invalidos)}")
+print(f"Validos: {len(validos)}")
+print(f"Invalidos: {len(invalidos)}")

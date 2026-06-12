@@ -108,10 +108,10 @@ for game in tqdm(games, desc="Insertando en ChromaDB"):
     combined_text = f"""
 {name}
 
-ABOUT THE GAME:
+---- ACERCA DEL JUEGO ----:
 {about}
 
-DETAILED DESCRIPTION:
+---- DESCRIPCIÓN DETALLADA ----:
 {detailed}
 """
 
@@ -132,7 +132,7 @@ chroma_collection.add(
     ids=ids
 )
 
-print("Inserción completada correctamente")
+print("Insercion completada correctamente")
 
 # ======================
 # SIMPLE SEARCH
@@ -152,7 +152,7 @@ print("=" * 70)
 
 while True:
     # Si el usuario presiona ENTER, se sale del programa.
-    query = input("\nEscribe tu búsqueda o presiona ENTER para salir: ").strip()
+    query = input("\nEscribe tu busqueda o presiona ENTER para salir: ").strip()
 
     if not query:
         print("\nSaliendo del buscador...")
@@ -168,7 +168,7 @@ while True:
         print("\nNo se encontraron resultados similares.")
         continue
 
-    print(f"\nResultados más relevantes para: '{query}'")
+    print(f"\nResultados mas relevantes para: '{query}'")
 
     for i in range(len(results["ids"][0])):
         # Se muestran los datos guardados junto con el texto del juego.
@@ -179,11 +179,11 @@ while True:
         print(f"{i+1}. {md['name']}")
         print("=" * 80)
 
-        print("\nInformación del juego:\n")
+        print("\nInformacion del juego:\n")
         print(doc)
 
         print("\nDevelopers:", ", ".join(md["developers"]))
         print("Publishers:", ", ".join(md["publishers"]))
-        print("Categories:", ", ".join(md["categories"]))
-        print("Genres:", ", ".join(md["genres"]))
+        print("Categorias:", ", ".join(md["categories"]))
+        print("Generos:", ", ".join(md["genres"]))
         print("=" * 80)
