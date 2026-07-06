@@ -45,7 +45,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 app = FastAPI(
     title="Steam Games API",
     version="1.0.0",
-    description="API REST para catalogo de juegos de Steam"
+    description="Bienvenido a la API de juegos de Steam. Esta API permite gestionar un catálogo de juegos, incluyendo autenticación de usuarios y operaciones CRUD protegidas para administradores."
 )
 
 app.add_middleware(
@@ -125,6 +125,12 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+class GameCreate(BaseModel):
+    name: str
+    steam_appid: int
+    type: Optional[str] = "game"
+    is_free: Optional[bool] = False
+
 # ─────────────────────────────────────────────
 #  HELPERS
 # ─────────────────────────────────────────────
@@ -179,6 +185,14 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=401)
 
     return user
+
+def require_admin(current_user=Depends(get_current_user)):
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Acceso restringido a administradores"
+        )
+    return current_user
 
 # ─────────────────────────────────────────────
 #  AUTH ENDPOINTS
@@ -254,3 +268,50 @@ def get_game_by_steam_appid(steam_appid: int, current_user=Depends(get_current_u
     if not doc:
         raise HTTPException(status_code=404, detail="Juego no encontrado")
     return mongo_to_game(doc)
+
+# ─────────────────────────────────────────────
+#  ENDPOINTS CRUD (PROTEGIDOS, SOLO ADMIN)
+# ─────────────────────────────────────────────
+
+@app.post("/games", status_code=201)
+def create_game(
+    game: GameCreate,
+    admin=Depends(require_admin)
+):
+    if games_collection.find_one({"steam_appid": game.steam_appid}):
+        raise HTTPException(400, "Juego ya existe")
+
+    result = games_collection.insert_one(game.dict())
+
+    return {
+        "message": "Juego agregado correctamente",
+        "id": str(result.inserted_id)
+    }
+    
+@app.put("/games/{mongo_id}")
+def update_game(
+    mongo_id: str,
+    game: Dict,
+    admin=Depends(require_admin)
+):
+    result = games_collection.update_one(
+        {"_id": parse_id(mongo_id)},
+        {"$set": game}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(404, "Juego no encontrado")
+
+    return {"message": "Juego actualizado correctamente"}
+    
+@app.delete("/games/{mongo_id}", status_code=204)
+def delete_game(
+    mongo_id: str,
+    admin=Depends(require_admin)
+):
+    result = games_collection.delete_one(
+        {"_id": parse_id(mongo_id)}
+    )
+
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Juego no encontrado")
