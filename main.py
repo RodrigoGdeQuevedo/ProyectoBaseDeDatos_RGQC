@@ -1,10 +1,16 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel, EmailStr
 from pymongo import MongoClient
 from bson import ObjectId
 from bson.errors import InvalidId
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
+from passlib.context import CryptContext
+from jose import jwt, JWTError
+from datetime import datetime, timedelta
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import Depends
 import os
 
 # ─────────────────────────────────────────────
@@ -21,6 +27,17 @@ MONGO_URI = os.getenv(
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 games_collection = db[COLLECTION_NAME]
+users_collection = db["users"]
+
+# ─────────────────────────────────────────────
+#  AUTH CONFIG
+# ─────────────────────────────────────────────
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "cambia_esto_en_produccion")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_MINUTES = 60
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 # ─────────────────────────────────────────────
 #  APP
@@ -60,7 +77,6 @@ class DLC(BaseModel):
 
 class Game(BaseModel):
     id: str
-
     type: Optional[str] = None
     name: str
     steam_appid: int
@@ -87,8 +103,27 @@ class Game(BaseModel):
 
     price_overview: Optional[dict] = None
     platforms: Optional[dict] = None
-    
     dlcs: Optional[List[DLC]] = None
+
+
+# ─────────────────────────────────────────────
+#  MODELOS AUTH
+# ─────────────────────────────────────────────
+
+class UserRegister(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 # ─────────────────────────────────────────────
 #  HELPERS
@@ -102,9 +137,6 @@ def parse_id(id_str: str) -> ObjectId:
 
 
 def normalize_requirements(game: dict):
-    """
-    Convierte [] → None para evitar errores de validación
-    """
     for key in ["pc_requirements", "mac_requirements", "linux_requirements"]:
         if isinstance(game.get(key), list):
             game[key] = None
@@ -118,33 +150,98 @@ def mongo_to_game(doc: dict) -> dict:
     return doc
 
 
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain, hashed) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=JWT_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            raise HTTPException(status_code=401)
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    user = users_collection.find_one({"username": username})
+    if not user:
+        raise HTTPException(status_code=401)
+
+    return user
+
 # ─────────────────────────────────────────────
-#  ENDPOINTS
+#  AUTH ENDPOINTS
+# ─────────────────────────────────────────────
+
+@app.post("/auth/register", status_code=201)
+def register(user: UserRegister):
+    if users_collection.find_one({"username": user.username}):
+        raise HTTPException(400, "Usuario ya existe")
+
+    users_collection.insert_one({
+        "username": user.username,
+        "email": user.email,
+        "password": hash_password(user.password),
+        "role": "user",
+        "is_active": True,
+        "created_at": datetime.utcnow(),
+        "last_login": None
+    })
+
+    return {"message": "Usuario registrado correctamente"}
+
+
+@app.post("/auth/login", response_model=Token)
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    db_user = users_collection.find_one({"username": form_data.username})
+
+    if not db_user or not verify_password(form_data.password, db_user["password"]):
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+    token = create_access_token({
+        "sub": db_user["username"],
+        "role": db_user["role"]
+    })
+
+    users_collection.update_one(
+        {"_id": db_user["_id"]},
+        {"$set": {"last_login": datetime.utcnow()}}
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
+
+# ─────────────────────────────────────────────
+#  ENDPOINTS EXISTENTES (PROTEGIDOS)
 # ─────────────────────────────────────────────
 
 @app.get("/health")
 def health():
-    try:
-        client.admin.command("ping")
-        return {"status": "ok", "mongodb": "connected"}
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=str(e))
+    client.admin.command("ping")
+    return {"status": "ok", "mongodb": "connected"}
 
 
 @app.get("/games", response_model=List[Game])
-def list_games(limit: int = 100):
-    """
-    Lista juegos.
-    """
+def list_games(limit: int = 100, current_user=Depends(get_current_user)):
     docs = games_collection.find().limit(limit)
     return [mongo_to_game(d) for d in docs]
 
 
 @app.get("/games/mongo_id/{mongo_id}", response_model=Game)
-def get_game_by_mongo_id(mongo_id: str):
-    """
-    Obtiene un juego por MongoID.
-    """
+def get_game_by_mongo_id(mongo_id: str, current_user=Depends(get_current_user)):
     doc = games_collection.find_one({"_id": parse_id(mongo_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Juego no encontrado")
@@ -152,10 +249,7 @@ def get_game_by_mongo_id(mongo_id: str):
 
 
 @app.get("/games/steam_appid/{steam_appid}", response_model=Game)
-def get_game_by_steam_appid(steam_appid: int):
-    """
-    Obtiene un juego por steam_appid.
-    """
+def get_game_by_steam_appid(steam_appid: int, current_user=Depends(get_current_user)):
     doc = games_collection.find_one({"steam_appid": steam_appid})
     if not doc:
         raise HTTPException(status_code=404, detail="Juego no encontrado")
