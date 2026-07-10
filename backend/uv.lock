@@ -1105,6 +1105,7 @@ dependencies = [
     { name = "jupyter" },
     { name = "notebook" },
     { name = "pymongo" },
+    { name = "requests" },
     { name = "uvicorn" },
 ]
 
@@ -1116,6 +1117,7 @@ requires-dist = [
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "notebook", specifier = ">=7.5.6" },
     { name = "pymongo", specifier = ">=4.17.0" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "uvicorn", specifier = ">=0.48.0" },
 ]
 
