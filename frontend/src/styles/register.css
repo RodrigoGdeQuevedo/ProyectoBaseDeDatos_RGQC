@@ -1,0 +1,64 @@
+.register-container {
+    max-width: 380px;
+    margin: 80px auto;
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 40px 32px;
+}
+
+.register-container h1 {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 28px;
+    border-left: 3px solid var(--color-accent);
+    padding-left: 12px;
+}
+
+.register-container input {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--color-bg-input);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    color: var(--color-text);
+    font-size: 0.95rem;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.register-container input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(102, 192, 244, 0.15);
+}
+
+.register-container input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.register-container button {
+    width: 100%;
+    padding: 12px;
+    background: var(--color-accent);
+    color: #0c1420;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background .15s ease;
+}
+
+.register-container button:hover {
+    background: var(--color-accent-strong);
+}
+
+.register-error {
+    color: var(--color-error);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+}

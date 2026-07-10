@@ -11,7 +11,10 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import Depends
+import requests
 import os
+from fastapi import Request
+from fastapi.responses import StreamingResponse
 
 # ─────────────────────────────────────────────
 #  CONEXIÓN A MONGODB
@@ -28,6 +31,9 @@ client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 games_collection = db[COLLECTION_NAME]
 users_collection = db["users"]
+
+# Cache en memoria para multimedia de Steam (evita golpear la API en cada click)
+media_cache: Dict[int, dict] = {}
 
 # ─────────────────────────────────────────────
 #  AUTH CONFIG
@@ -90,6 +96,7 @@ class Game(BaseModel):
     short_description: Optional[str] = None
     supported_languages: Optional[str] = None
     website: Optional[str] = None
+    release_date: Optional[dict] = None
 
     pc_requirements: Optional[dict] = None
     mac_requirements: Optional[dict] = None
@@ -102,9 +109,11 @@ class Game(BaseModel):
     genres: Optional[list[dict]] = None
 
     price_overview: Optional[dict] = None
+    metacritic: Optional[dict] = None
     platforms: Optional[dict] = None
     dlcs: Optional[List[DLC]] = None
-
+    
+    youtube_trailer_id: Optional[str] = None
 
 # ─────────────────────────────────────────────
 #  MODELOS AUTH
@@ -194,6 +203,57 @@ def require_admin(current_user=Depends(get_current_user)):
         )
     return current_user
 
+
+def obtener_media_steam(steam_appid: int):
+    url = f"https://store.steampowered.com/api/appdetails?cc=us&l=english&appids={steam_appid}"
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+    data = response.json()
+
+    key = str(steam_appid)
+    if key not in data or not data[key]["success"]:
+        return None
+
+    d = data[key]["data"]
+
+    def mejor_resolucion(formato_dict):
+        if not formato_dict:
+            return None
+        if "max" in formato_dict:
+            return formato_dict["max"]
+        valores = list(formato_dict.values())
+        return valores[0] if valores else None
+
+    screenshots = [
+        {
+            "id": s.get("id"),
+            "thumbnail": s.get("path_thumbnail"),
+            "full": s.get("path_full"),
+        }
+        for s in d.get("screenshots", [])
+    ]
+
+    movies = []
+    for m in d.get("movies", []):
+        mp4 = mejor_resolucion(m.get("mp4"))
+        webm = mejor_resolucion(m.get("webm"))
+
+        if mp4 or webm:
+            movies.append({
+                "id": m.get("id"),
+                "name": m.get("name"),
+                "thumbnail": m.get("thumbnail"),
+                "webm": webm,
+                "mp4": mp4,
+            })
+
+    return {
+        "header_image": d.get("header_image"),
+        "background": d.get("background_raw") or d.get("background"),
+        "screenshots": screenshots,
+        "movies": movies,
+    }
+
 # ─────────────────────────────────────────────
 #  AUTH ENDPOINTS
 # ─────────────────────────────────────────────
@@ -268,6 +328,66 @@ def get_game_by_steam_appid(steam_appid: int, current_user=Depends(get_current_u
     if not doc:
         raise HTTPException(status_code=404, detail="Juego no encontrado")
     return mongo_to_game(doc)
+
+
+@app.get("/games/{mongo_id}/media")
+def get_game_media(mongo_id: str, current_user=Depends(get_current_user)):
+    doc = games_collection.find_one({"_id": parse_id(mongo_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Juego no encontrado")
+
+    steam_appid = doc.get("steam_appid")
+
+    if steam_appid in media_cache:
+        return media_cache[steam_appid]
+
+    media = obtener_media_steam(steam_appid)
+    if not media:
+        raise HTTPException(status_code=502, detail="No se pudo obtener multimedia desde Steam")
+
+    media_cache[steam_appid] = media
+    return media
+
+ALLOWED_VIDEO_SUFFIXES = (
+    ".akamaihd.net",
+    ".steamstatic.com",
+    ".steamcontent.com",
+    "steampowered.com",
+)
+
+@app.get("/media/video-proxy")
+def proxy_video(url: str, request: Request):
+    from urllib.parse import urlparse
+
+    hostname = urlparse(url).hostname or ""
+    if not any(hostname.endswith(suffix) for suffix in ALLOWED_VIDEO_SUFFIXES):
+        raise HTTPException(status_code=400, detail="Host no permitido")
+
+    headers = {
+        "Referer": "https://store.steampowered.com/",
+        "User-Agent": "Mozilla/5.0",
+    }
+    range_header = request.headers.get("range")
+    if range_header:
+        headers["Range"] = range_header
+
+    upstream = requests.get(url, headers=headers, stream=True, timeout=15)
+
+    resp_headers = {}
+    for h in ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"]:
+        if h in upstream.headers:
+            resp_headers[h] = upstream.headers[h]
+
+    def iter_content():
+        for chunk in upstream.iter_content(chunk_size=8192):
+            yield chunk
+
+    return StreamingResponse(
+        iter_content(),
+        status_code=upstream.status_code,
+        headers=resp_headers,
+        media_type=upstream.headers.get("Content-Type", "video/mp4"),
+    )
 
 # ─────────────────────────────────────────────
 #  ENDPOINTS CRUD (PROTEGIDOS, SOLO ADMIN)
