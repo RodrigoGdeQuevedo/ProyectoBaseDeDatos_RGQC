@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
+
+:root {
+    --color-bg: #171a21;
+    --color-bg-panel: #1b2838;
+    --color-bg-input: #22344a;
+    --color-border: #2a3f5a;
+    --color-accent: #66c0f4;
+    --color-accent-strong: #4a9fd8;
+    --color-price: #a4d007;
+    --color-error: #e2574c;
+    --color-text: #ffffff;
+    --color-text-muted: #8ba3b8;
+
+    --font-display: "Rajdhani", sans-serif;
+    --font-body: "Inter", sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+}
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+html,body,#root{
+    width:100%;
+    min-height:100vh;
+}
+
+body{
+    background: var(--color-bg);
+    font-family: var(--font-body);
+    color:white;
+    font-family:Segoe UI,Arial,sans-serif;
+}
+
+a{
+    text-decoration:none;
+    color:inherit;
+}
+
+button{
+    font-family:inherit;
+}
+
+input{
+    font-family:inherit;
+}
