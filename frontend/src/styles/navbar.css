@@ -25,6 +25,21 @@
     gap: 24px;
 }
 
+.navbar-user {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+}
+
+.navbar-user__role {
+    color: var(--color-price);
+}
+
 .navbar-links a {
     font-family: var(--font-mono);
     font-size: 0.8rem;

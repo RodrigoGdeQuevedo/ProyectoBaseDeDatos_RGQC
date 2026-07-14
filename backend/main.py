@@ -13,8 +13,12 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import Depends
 import requests
 import os
+from pathlib import Path
+from html import unescape
+import re
 from fastapi import Request
 from fastapi.responses import StreamingResponse
+import chromadb
 
 # ─────────────────────────────────────────────
 #  CONEXIÓN A MONGODB
@@ -34,6 +38,10 @@ users_collection = db["users"]
 
 # Cache en memoria para multimedia de Steam (evita golpear la API en cada click)
 media_cache: Dict[int, dict] = {}
+CHROMA_DIR = str(Path(__file__).resolve().parent / "chromadb")
+CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "documentos")
+CHROMA_DIMENSION = int(os.getenv("CHROMA_DIMENSION", "384"))
+chroma_collection = None
 
 # ─────────────────────────────────────────────
 #  AUTH CONFIG
@@ -139,6 +147,13 @@ class GameCreate(BaseModel):
     steam_appid: int
     type: Optional[str] = "game"
     is_free: Optional[bool] = False
+    short_description: Optional[str] = None
+    detailed_description: Optional[str] = None
+    website: Optional[str] = None
+    youtube_trailer_id: Optional[str] = None
+    developers: Optional[list[str]] = None
+    publishers: Optional[list[str]] = None
+    genres: Optional[list[dict]] = None
 
 # ─────────────────────────────────────────────
 #  HELPERS
@@ -163,6 +178,161 @@ def mongo_to_game(doc: dict) -> dict:
     doc["id"] = str(doc["_id"])
     doc.pop("_id", None)
     return doc
+
+
+class SimpleEmbeddingFunction:
+    def __init__(self, dimension: int = 384):
+        self.dimension = dimension
+
+    def name(self) -> str:
+        return f"simple_embedding_{self.dimension}"
+
+    def _embed(self, texts: List[str]) -> List[List[float]]:
+        embeddings: List[List[float]] = []
+
+        for text in texts:
+            vector = [0.0] * self.dimension
+            for token in (text or "").lower().split():
+                index = sum(ord(char) for char in token) % self.dimension
+                vector[index] += 1.0
+
+            norm = sum(value * value for value in vector) ** 0.5 or 1.0
+            embeddings.append([value / norm for value in vector])
+
+        return embeddings
+
+    def embed_documents(self, input):
+        if isinstance(input, str):
+            input = [input]
+        return self._embed(list(input))
+
+    def embed_query(self, input):
+        if isinstance(input, str):
+            input = [input]
+        return self._embed(list(input))
+
+    __call__ = embed_documents
+
+
+def clean_text(text: str | None) -> str:
+    if not text or not isinstance(text, str):
+        return "No disponible"
+
+    text = unescape(text)
+    text = re.sub(r"<.*?>", "", text)
+    text = re.sub(r"\n\s*\n+", "\n\n", text)
+    return text.strip()
+
+
+def clean_list(value) -> list[str]:
+    if isinstance(value, list) and len(value) > 0:
+        return [str(v) for v in value]
+    return ["No disponible"]
+
+
+def build_chroma_document(game: dict) -> str:
+    name = game.get("name", "Sin nombre")
+    about = clean_text(game.get("about_the_game", ""))
+    detailed = clean_text(game.get("detailed_description", ""))
+    developers = ", ".join(clean_list(game.get("developers")))
+    publishers = ", ".join(clean_list(game.get("publishers")))
+    genres = ", ".join(clean_list(game.get("genres")))
+
+    return f"""
+{name}
+
+---- ACERCA DEL JUEGO ----:
+{about}
+
+---- DESCRIPCIÓN DETALLADA ----:
+{detailed}
+
+---- DESARROLLADORES ----:
+{developers}
+
+---- PUBLICADORES ----:
+{publishers}
+
+---- GÉNEROS ----:
+{genres}
+"""
+
+
+def bootstrap_chroma_collection() -> None:
+    if chroma_collection is None:
+        return
+
+    if chroma_collection.count() > 0:
+        return
+
+    documents: list[str] = []
+    metadatas: list[dict] = []
+    ids: list[str] = []
+
+    for game in games_collection.find():
+        game_id = str(game["_id"])
+        documents.append(build_chroma_document(game))
+        ids.append(game_id)
+        metadatas.append({
+            "name": game.get("name", "Sin nombre"),
+            "developers": clean_list(game.get("developers")),
+            "publishers": clean_list(game.get("publishers")),
+            "categories": clean_list(game.get("categories")),
+            "genres": clean_list(game.get("genres")),
+        })
+
+    if documents:
+        chroma_collection.add(
+            documents=documents,
+            metadatas=metadatas,
+            ids=ids,
+        )
+
+
+def load_chroma_collection():
+    try:
+        chroma_client = chromadb.Client(
+            chromadb.config.Settings(persist_directory=CHROMA_DIR)
+        )
+        return chroma_client.get_or_create_collection(
+            name=CHROMA_COLLECTION_NAME,
+            embedding_function=SimpleEmbeddingFunction(CHROMA_DIMENSION),
+        )
+    except Exception as exc:
+        print(f"ChromaDB no disponible: {exc}")
+        return None
+
+
+chroma_collection = load_chroma_collection()
+bootstrap_chroma_collection()
+
+
+def fetch_games_by_ids(game_ids: List[str]) -> List[dict]:
+    object_ids = []
+    for game_id in game_ids:
+        try:
+            object_ids.append(ObjectId(game_id))
+        except Exception:
+            continue
+
+    if not object_ids:
+        return []
+
+    docs = list(games_collection.find({"_id": {"$in": object_ids}}))
+    docs_by_id = {str(doc["_id"]): doc for doc in docs}
+
+    ordered_docs = []
+    for game_id in game_ids:
+        doc = docs_by_id.get(game_id)
+        if doc:
+            ordered_docs.append(mongo_to_game(doc))
+
+    return ordered_docs
+
+
+def get_user_favorite_ids(user_doc: dict) -> list[str]:
+    favorites = user_doc.get("favorites", [])
+    return [favorite_id for favorite_id in favorites if isinstance(favorite_id, str)]
 
 
 def hash_password(password: str) -> str:
@@ -269,6 +439,7 @@ def register(user: UserRegister):
         "password": hash_password(user.password),
         "role": "user",
         "is_active": True,
+        "favorites": [],
         "created_at": datetime.utcnow(),
         "last_login": None
     })
@@ -314,6 +485,24 @@ def list_games(limit: int = 100, current_user=Depends(get_current_user)):
     return [mongo_to_game(d) for d in docs]
 
 
+@app.get("/games/search", response_model=List[Game])
+def search_games(q: str, limit: int = 12, current_user=Depends(get_current_user)):
+    query = q.strip()
+    if not query:
+        return list_games(limit=limit, current_user=current_user)
+
+    if chroma_collection is None:
+        raise HTTPException(status_code=503, detail="El buscador semántico no está disponible")
+
+    results = chroma_collection.query(
+        query_texts=[query],
+        n_results=max(1, min(limit, 20))
+    )
+
+    game_ids = results.get("ids", [[]])[0]
+    return fetch_games_by_ids(game_ids)
+
+
 @app.get("/games/mongo_id/{mongo_id}", response_model=Game)
 def get_game_by_mongo_id(mongo_id: str, current_user=Depends(get_current_user)):
     doc = games_collection.find_one({"_id": parse_id(mongo_id)})
@@ -347,6 +536,36 @@ def get_game_media(mongo_id: str, current_user=Depends(get_current_user)):
 
     media_cache[steam_appid] = media
     return media
+
+
+@app.get("/users/me/favorites", response_model=List[Game])
+def get_my_favorites(current_user=Depends(get_current_user)):
+    favorite_ids = get_user_favorite_ids(current_user)
+    return fetch_games_by_ids(favorite_ids)
+
+
+@app.post("/users/me/favorites/{mongo_id}")
+def add_to_favorites(mongo_id: str, current_user=Depends(get_current_user)):
+    doc = games_collection.find_one({"_id": parse_id(mongo_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Juego no encontrado")
+
+    users_collection.update_one(
+        {"_id": current_user["_id"]},
+        {"$addToSet": {"favorites": mongo_id}}
+    )
+
+    return {"message": "Juego agregado a favoritos"}
+
+
+@app.delete("/users/me/favorites/{mongo_id}")
+def remove_from_favorites(mongo_id: str, current_user=Depends(get_current_user)):
+    users_collection.update_one(
+        {"_id": current_user["_id"]},
+        {"$pull": {"favorites": mongo_id}}
+    )
+
+    return {"message": "Juego eliminado de favoritos"}
 
 ALLOWED_VIDEO_SUFFIXES = (
     ".akamaihd.net",
@@ -401,7 +620,7 @@ def create_game(
     if games_collection.find_one({"steam_appid": game.steam_appid}):
         raise HTTPException(400, "Juego ya existe")
 
-    result = games_collection.insert_one(game.dict())
+    result = games_collection.insert_one(game.dict(exclude_none=True))
 
     return {
         "message": "Juego agregado correctamente",
@@ -414,9 +633,10 @@ def update_game(
     game: Dict,
     admin=Depends(require_admin)
 ):
+    payload = {key: value for key, value in game.items() if value is not None}
     result = games_collection.update_one(
         {"_id": parse_id(mongo_id)},
-        {"$set": game}
+        {"$set": payload}
     )
 
     if result.matched_count == 0:

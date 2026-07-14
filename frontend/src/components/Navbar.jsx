@@ -20,9 +20,16 @@ function Navbar() {
 
             <div className="navbar-links">
                 {user ? (
-                    <button onClick={handleLogout} className="navbar-button">
-                        Cerrar sesión
-                    </button>
+                    <>
+                        <span className="navbar-user">
+                            {user.username || "Usuario"}
+                            {user.role === "admin" && <strong className="navbar-user__role">Admin</strong>}
+                        </span>
+
+                        <button onClick={handleLogout} className="navbar-button">
+                            Cerrar sesión
+                        </button>
+                    </>
                 ) : (
                     <>
                         <Link to="/login">Iniciar sesión</Link>
