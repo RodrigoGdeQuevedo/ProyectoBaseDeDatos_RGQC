@@ -27,6 +27,11 @@ const emptyAdminForm = {
     genres: ""
 };
 
+const emptyQuickAddForm = {
+    steam_appid: "",
+    youtube_trailer_id: ""
+};
+
 function csvToList(value) {
     return value
         .split(",")
@@ -65,6 +70,8 @@ function Catalog() {
     const [errorMessage, setErrorMessage] = useState("");
     const [adminForm, setAdminForm] = useState(emptyAdminForm);
     const [editingGame, setEditingGame] = useState(null);
+    const [quickAddForm, setQuickAddForm] = useState(emptyQuickAddForm);
+    const [importing, setImporting] = useState(false);
 
     async function loadGames(query = "") {
         setLoading(true);
@@ -126,6 +133,40 @@ function Catalog() {
         setStatusMessage("");
     }
 
+    async function handleQuickAddSubmit(event) {
+        event.preventDefault();
+        setErrorMessage("");
+        setStatusMessage("");
+
+        const steamAppid = Number(quickAddForm.steam_appid);
+
+        if (!quickAddForm.steam_appid.trim() || Number.isNaN(steamAppid)) {
+            setErrorMessage("Ingresa un Steam App ID válido.");
+            return;
+        }
+
+        const payload = { steam_appid: steamAppid };
+
+        if (quickAddForm.youtube_trailer_id.trim()) {
+            payload.youtube_trailer_id = quickAddForm.youtube_trailer_id.trim();
+        }
+
+        setImporting(true);
+
+        try {
+            await createGame(payload);
+            setStatusMessage("Juego importado correctamente desde Steam.");
+            setQuickAddForm(emptyQuickAddForm);
+            setSearchQuery("");
+            await loadGames("");
+            await loadFavorites();
+        } catch (error) {
+            setErrorMessage(error.response?.data?.detail || "No se pudo importar el juego");
+        } finally {
+            setImporting(false);
+        }
+    }
+
     async function handleAdminSubmit(event) {
         event.preventDefault();
         setErrorMessage("");
@@ -178,17 +219,12 @@ function Catalog() {
         }
 
         try {
-            if (editingGame) {
-                await updateGame(editingGame.id, payload);
-                setStatusMessage("Juego actualizado correctamente.");
-            } else {
-                await createGame(payload);
-                setStatusMessage("Juego agregado correctamente.");
-            }
-
+            await updateGame(editingGame.id, payload);
+            setStatusMessage("Juego actualizado correctamente.");
             setEditingGame(null);
             setAdminForm(emptyAdminForm);
             await loadGames(searchQuery);
+            await loadFavorites();
         } catch (error) {
             setErrorMessage(error.response?.data?.detail || "No se pudo guardar el juego");
         }
@@ -240,63 +276,80 @@ function Catalog() {
                 className="game-card"
                 onClick={() => setSelectedGame(game)}
             >
-                {game.is_free && (
-                    <span className="game-card__badge">Gratis</span>
-                )}
-
-                <h2 className="game-card__title">{game.name}</h2>
-
-                <p className="game-card__row">
-                    <span className="game-card__label">Género</span>
-                    {game.genres?.map((genre) => genre.description).join(", ") || "No disponible"}
-                </p>
-
-                <p className="game-card__row">
-                    <span className="game-card__label">Desarrollador</span>
-                    {game.developers?.join(", ") || "No disponible"}
-                </p>
-
-                <p className="game-card__row game-card__price">
-                    {game.price_overview?.final_formatted || (game.is_free ? "" : "N/D")}
-                </p>
-
-                <div className="game-card__actions">
-                    <button
-                        type="button"
-                        className={`game-card__action ${isFavorite ? "game-card__action--active" : ""}`}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            handleToggleFavorite(game);
-                        }}
-                    >
-                        {isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
-                    </button>
-
-                    {isAdmin && (
-                        <>
-                            <button
-                                type="button"
-                                className="game-card__action"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleEdit(game);
-                                }}
-                            >
-                                Editar
-                            </button>
-
-                            <button
-                                type="button"
-                                className="game-card__action game-card__action--danger"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleDelete(game);
-                                }}
-                            >
-                                Eliminar
-                            </button>
-                        </>
+                <div className="game-card__media">
+                    {game.is_free && (
+                        <span className="game-card__badge">Gratis</span>
                     )}
+
+                    {game.header_image ? (
+                        <img
+                            src={game.header_image}
+                            alt={game.name}
+                            referrerPolicy="no-referrer"
+                            loading="lazy"
+                        />
+                    ) : (
+                        <div className="game-card__media--placeholder">
+                            {game.name?.charAt(0).toUpperCase() || "?"}
+                        </div>
+                    )}
+                </div>
+
+                <div className="game-card__body">
+                    <h2 className="game-card__title">{game.name}</h2>
+
+                    <p className="game-card__row">
+                        <span className="game-card__label">Género</span>
+                        {game.genres?.map((genre) => genre.description).join(", ") || "No disponible"}
+                    </p>
+
+                    <p className="game-card__row">
+                        <span className="game-card__label">Desarrollador</span>
+                        {game.developers?.join(", ") || "No disponible"}
+                    </p>
+
+                    <p className="game-card__row game-card__price">
+                        {game.price_overview?.final_formatted || (game.is_free ? "" : "N/D")}
+                    </p>
+
+                    <div className="game-card__actions">
+                        <button
+                            type="button"
+                            className={`game-card__action ${isFavorite ? "game-card__action--active" : ""}`}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                handleToggleFavorite(game);
+                            }}
+                        >
+                            {isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+                        </button>
+
+                        {isAdmin && (
+                            <>
+                                <button
+                                    type="button"
+                                    className="game-card__action"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleEdit(game);
+                                    }}
+                                >
+                                    Editar
+                                </button>
+
+                                <button
+                                    type="button"
+                                    className="game-card__action game-card__action--danger"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleDelete(game);
+                                    }}
+                                >
+                                    Eliminar
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
         );
@@ -308,7 +361,7 @@ function Catalog() {
                 <div>
                     <h1 className="catalog-header">Catálogo de juegos</h1>
                     <p className="catalog-subtitle">
-                        Búsqueda semántica con ChromaDB, favoritos personales y administración desde el frontend.
+                        Busca y explora juegos de Steam, agrega tus favoritos y, si eres administrador, importa juegos directamente desde la API de Steam.
                     </p>
                 </div>
             </div>
@@ -330,23 +383,50 @@ function Catalog() {
                 )}
             </form>
 
-            {isAdmin && (
+            {isAdmin && !editingGame && (
                 <section className="admin-panel">
                     <div className="admin-panel__header">
                         <div>
-                            <h2 className="admin-panel__title">
-                                {editingGame ? "Editar juego" : "Agregar juego"}
-                            </h2>
+                            <h2 className="admin-panel__title">Agregar juego desde Steam</h2>
                             <p className="admin-panel__subtitle">
-                                Solo los usuarios con rol admin pueden crear, actualizar o eliminar juegos.
+                                Ingresa el Steam App ID, a partir de ahí se importarán automáticamente los datos del juego desde la API de Steam.
+                                <br />
+                                Igualmente agrega el ID del trailer de YouTube si quieres que se muestre en la página del juego.
+                            </p>
+                        </div>
+                    </div>
+
+                    <form className="admin-form admin-form--quick" onSubmit={handleQuickAddSubmit}>
+                        <input
+                            value={quickAddForm.steam_appid}
+                            onChange={(event) => setQuickAddForm((current) => ({ ...current, steam_appid: event.target.value }))}
+                            placeholder="Steam App ID"
+                        />
+                        <input
+                            value={quickAddForm.youtube_trailer_id}
+                            onChange={(event) => setQuickAddForm((current) => ({ ...current, youtube_trailer_id: event.target.value }))}
+                            placeholder="YouTube Trailer ID"
+                        />
+                        <button type="submit" disabled={importing}>
+                            {importing ? "Importando..." : "Agregar juego"}
+                        </button>
+                    </form>
+                </section>
+            )}
+
+            {isAdmin && editingGame && (
+                <section className="admin-panel">
+                    <div className="admin-panel__header">
+                        <div>
+                            <h2 className="admin-panel__title">Editar juego</h2>
+                            <p className="admin-panel__subtitle">
+                                Ajusta manualmente los campos de este juego ya importado.
                             </p>
                         </div>
 
-                        {editingGame && (
-                            <button type="button" className="catalog-search__ghost" onClick={handleCancelEdit}>
-                                Cancelar edición
-                            </button>
-                        )}
+                        <button type="button" className="catalog-search__ghost" onClick={handleCancelEdit}>
+                            Cancelar edición
+                        </button>
                     </div>
 
                     <form className="admin-form" onSubmit={handleAdminSubmit}>
@@ -410,9 +490,7 @@ function Catalog() {
                             placeholder="Descripción detallada"
                         />
 
-                        <button type="submit">
-                            {editingGame ? "Guardar cambios" : "Agregar juego"}
-                        </button>
+                        <button type="submit">Guardar cambios</button>
                     </form>
                 </section>
             )}

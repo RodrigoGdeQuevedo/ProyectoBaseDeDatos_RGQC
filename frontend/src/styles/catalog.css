@@ -172,10 +172,12 @@
     background: var(--color-bg-panel);
     border: 1px solid var(--color-border);
     border-radius: 4px;
-    padding: 20px;
+    padding: 0;
     position: relative;
     overflow: hidden;
     cursor: pointer;
+    display: flex;
+    flex-direction: column;
     transition: transform .15s ease, border-color .15s ease;
 }
 
@@ -184,47 +186,66 @@
     border-color: var(--color-accent);
 }
 
-.game-card__actions {
+.game-card__media {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 460 / 215;
+    overflow: hidden;
+    background: var(--color-bg-input);
+}
+
+.game-card__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform .3s ease;
+}
+
+.game-card:hover .game-card__media img {
+    transform: scale(1.05);
+}
+
+.game-card__media--placeholder {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--color-border);
+    background: linear-gradient(135deg, var(--color-bg-input), var(--color-bg-panel));
 }
 
-.game-card__action {
-    border: 1px solid var(--color-border);
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--color-text-muted);
-    padding: 8px 10px;
-    border-radius: 4px;
+.game-card__badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: var(--color-price);
+    color: #10210a;
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: 0.65rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    cursor: pointer;
+    letter-spacing: 0.03em;
+    padding: 4px 10px;
+    border-radius: 3px;
+    z-index: 2;
 }
 
-.game-card__action:hover {
-    border-color: var(--color-accent);
-    color: var(--color-accent);
-}
-
-.game-card__action--active {
-    border-color: var(--color-price);
-    color: var(--color-price);
-}
-
-.game-card__action--danger:hover {
-    border-color: var(--color-error);
-    color: var(--color-error);
+.game-card__body {
+    padding: 16px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
 }
 
 .game-card__title {
     font-family: var(--font-display);
-    font-size: 1.15rem;
+    font-size: 1.1rem;
     font-weight: 600;
-    margin-bottom: 12px;
-    padding-right: 50px;
+    margin-bottom: 10px;
+    line-height: 1.2;
 }
 
 .game-card__row {
@@ -246,20 +267,8 @@
     font-family: var(--font-mono);
     color: var(--color-price);
     font-weight: 600;
-}
-
-.game-card__badge {
-    position: absolute;
-    top: 14px;
-    right: -30px;
-    background: var(--color-price);
-    color: #10210a;
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 4px 36px;
-    transform: rotate(35deg);
+    margin-top: auto;
+    padding-top: 8px;
 }
 
 .catalog-loading {
@@ -276,6 +285,52 @@
     font-family: var(--font-mono);
     font-size: 0.85rem;
     padding: 24px 0;
+}
+
+.game-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--color-border);
+}
+
+.game-card__action {
+    flex: 1 1 auto;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    padding: 8px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s ease;
+}
+
+.game-card__action:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.game-card__action--active {
+    border-color: var(--color-price);
+    color: var(--color-price);
+}
+
+.game-card__action--active:hover {
+    border-color: var(--color-price);
+    color: var(--color-price);
+    filter: brightness(1.2);
+}
+
+.game-card__action--danger:hover {
+    border-color: var(--color-error);
+    color: var(--color-error);
 }
 
 @media (max-width: 900px) {
