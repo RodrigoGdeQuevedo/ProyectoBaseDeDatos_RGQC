@@ -333,6 +333,54 @@
     color: var(--color-error);
 }
 
+.catalog-section--collapsible {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.catalog-section__toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.catalog-section--collapsible .catalog-section__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0;
+}
+
+.catalog-section__count {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--color-bg);
+    background: var(--color-accent);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.catalog-section__chevron {
+    font-size: 1.2rem;
+    color: var(--color-text-muted);
+    transition: transform .2s ease;
+}
+
+.catalog-section__chevron--open {
+    transform: rotate(180deg);
+}
+
+.catalog-section--collapsible .catalog-grid {
+    margin-top: 18px;
+}
+
 @media (max-width: 900px) {
     .catalog-header-row {
         flex-direction: column;
@@ -346,5 +394,150 @@
 
     .admin-form__checkbox {
         grid-column: auto;
+    }
+}
+
+.catalog-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+}
+
+.filters-sidebar {
+    flex: 0 0 220px;
+    position: sticky;
+    top: 80px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 18px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.filters-sidebar__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.filters-sidebar__title {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 1rem;
+}
+
+.filters-sidebar__clear {
+    background: none;
+    border: none;
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+}
+
+.filters-sidebar__clear:hover {
+    text-decoration: underline;
+}
+
+.filters-sidebar__count {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-bottom: 16px;
+}
+
+.filters-sidebar__group {
+    margin-bottom: 20px;
+}
+
+.filters-sidebar__group:last-child {
+    margin-bottom: 0;
+}
+
+.filters-sidebar__group-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-accent);
+    margin-bottom: 10px;
+}
+
+.filters-sidebar__option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--color-text);
+    padding: 4px 0;
+    cursor: pointer;
+}
+
+.filters-sidebar__option input {
+    accent-color: var(--color-accent);
+    width: 14px;
+    height: 14px;
+}
+
+.filters-sidebar__genre-list {
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
+    scrollbar-width: none;
+    scrollbar-color: transparent transparent;
+}
+
+.filters-sidebar__genre-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.filters-sidebar__genre-list:hover,
+.filters-sidebar__genre-list--visible {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.45) transparent;
+}
+
+.filters-sidebar__genre-list:hover::-webkit-scrollbar,
+.filters-sidebar__genre-list--visible::-webkit-scrollbar {
+    width: 8px;
+}
+
+.filters-sidebar__genre-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.filters-sidebar__genre-list::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    transition: background-color 0.2s ease;
+}
+
+.filters-sidebar__genre-list:hover::-webkit-scrollbar-thumb,
+.filters-sidebar__genre-list--visible::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.45);
+}
+
+.catalog-main {
+    flex: 1;
+    min-width: 0;
+}
+
+@media (max-width: 900px) {
+    .catalog-layout {
+        flex-direction: column;
+    }
+
+    .filters-sidebar {
+        flex: none;
+        width: 100%;
+        position: static;
+    }
+
+    .filters-sidebar__genre-list {
+        max-height: none;
     }
 }

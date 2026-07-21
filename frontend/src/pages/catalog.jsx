@@ -1,6 +1,7 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
 import GameModal from "../components/GameModal";
+import FiltersSidebar from "../components/FiltersSidebar";
 import {
     addFavorite,
     createGame,
@@ -63,6 +64,7 @@ function Catalog() {
 
     const [games, setGames] = useState([]);
     const [favorites, setFavorites] = useState([]);
+    const [favoritesOpen, setFavoritesOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [selectedGame, setSelectedGame] = useState(null);
     const [searchQuery, setSearchQuery] = useState("");
@@ -72,6 +74,8 @@ function Catalog() {
     const [editingGame, setEditingGame] = useState(null);
     const [quickAddForm, setQuickAddForm] = useState(emptyQuickAddForm);
     const [importing, setImporting] = useState(false);
+    const [priceFilter, setPriceFilter] = useState("all");
+    const [selectedGenres, setSelectedGenres] = useState(() => new Set());
 
     async function loadGames(query = "") {
         setLoading(true);
@@ -109,6 +113,52 @@ function Catalog() {
     useEffect(() => {
         loadFavorites();
     }, [user]);
+
+    const availableGenres = useMemo(() => {
+        const set = new Set();
+
+        games.forEach((game) => {
+            game.genres?.forEach((genre) => {
+                if (genre.description) {
+                    set.add(genre.description);
+                }
+            });
+        });
+
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [games]);
+
+    const displayedGames = useMemo(() => {
+        return games.filter((game) => {
+            if (priceFilter === "free" && !game.is_free) return false;
+            if (priceFilter === "paid" && game.is_free) return false;
+
+            if (selectedGenres.size > 0) {
+                const gameGenres = game.genres?.map((genre) => genre.description) || [];
+                const hasMatch = gameGenres.some((genre) => selectedGenres.has(genre));
+                if (!hasMatch) return false;
+            }
+
+            return true;
+        });
+    }, [games, priceFilter, selectedGenres]);
+
+    function toggleGenre(genre) {
+        setSelectedGenres((current) => {
+            const next = new Set(current);
+            if (next.has(genre)) {
+                next.delete(genre);
+            } else {
+                next.add(genre);
+            }
+            return next;
+        });
+    }
+
+    function clearFilters() {
+        setPriceFilter("all");
+        setSelectedGenres(new Set());
+    }
 
     async function handleSearchSubmit(event) {
         event.preventDefault();
@@ -499,29 +549,59 @@ function Catalog() {
             {errorMessage && <p className="catalog-status catalog-status--error">{errorMessage}</p>}
 
             {favorites.length > 0 && (
-                <section className="catalog-section">
-                    <h2 className="catalog-section__title">Mis favoritos</h2>
-                    <div className="catalog-grid">
-                        {favorites.map((game) => renderGameCard(game))}
-                    </div>
+                <section className="catalog-section catalog-section--collapsible">
+                    <button
+                        type="button"
+                        className="catalog-section__toggle"
+                        onClick={() => setFavoritesOpen((value) => !value)}
+                    >
+                        <h2 className="catalog-section__title">
+                            Mis favoritos
+                            <span className="catalog-section__count">{favorites.length}</span>
+                        </h2>
+
+                        <span className={`catalog-section__chevron ${favoritesOpen ? "catalog-section__chevron--open" : ""}`}>
+                            ⌄
+                        </span>
+                    </button>
+
+                    {favoritesOpen && (
+                        <div className="catalog-grid">
+                            {favorites.map((game) => renderGameCard(game))}
+                        </div>
+                    )}
                 </section>
             )}
 
-            <section className="catalog-section">
-                <h2 className="catalog-section__title">
-                    {searchQuery.trim() ? "Resultados de búsqueda" : "Todos los juegos"}
-                </h2>
+            <div className="catalog-layout">
+                <FiltersSidebar
+                    genres={availableGenres}
+                    selectedGenres={selectedGenres}
+                    onToggleGenre={toggleGenre}
+                    priceFilter={priceFilter}
+                    onPriceFilterChange={setPriceFilter}
+                    onClear={clearFilters}
+                    resultCount={displayedGames.length}
+                />
 
-                {loading ? (
-                    <p className="catalog-loading">Cargando juegos...</p>
-                ) : games.length === 0 ? (
-                    <p className="catalog-empty">No se encontraron juegos para mostrar.</p>
-                ) : (
-                    <div className="catalog-grid">
-                        {games.map((game) => renderGameCard(game))}
-                    </div>
-                )}
-            </section>
+                <div className="catalog-main">
+                    <section className="catalog-section">
+                        <h2 className="catalog-section__title">
+                            {searchQuery.trim() ? "Resultados de búsqueda" : "Todos los juegos"}
+                        </h2>
+
+                        {loading ? (
+                            <p className="catalog-loading">Cargando juegos...</p>
+                        ) : displayedGames.length === 0 ? (
+                            <p className="catalog-empty">No se encontraron juegos para mostrar.</p>
+                        ) : (
+                            <div className="catalog-grid">
+                                {displayedGames.map((game) => renderGameCard(game))}
+                            </div>
+                        )}
+                    </section>
+                </div>
+            </div>
 
             {selectedGame && (
                 <GameModal game={selectedGame} onClose={() => setSelectedGame(null)} />
