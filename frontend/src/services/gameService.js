@@ -47,3 +47,11 @@ export async function removeFavorite(id) {
     const response = await api.delete(`/users/me/favorites/${id}`);
     return response.data;
 }
+
+export async function getCustomLists() { return (await api.get("/users/me/lists")).data; }
+export async function createCustomList(name) { return (await api.post("/users/me/lists", { name })).data; }
+export async function addGameToList(listId, gameId) { return api.post(`/users/me/lists/${listId}/games/${gameId}`); }
+export async function getCustomListGames(listId) { return (await api.get(`/users/me/lists/${listId}/games`)).data; }
+export async function removeGameFromList(listId, gameId) { return api.delete(`/users/me/lists/${listId}/games/${gameId}`); }
+export async function getGameReviews(gameId) { return (await api.get(`/games/${gameId}/reviews`)).data; }
+export async function saveGameReview(gameId, review) { return api.put(`/games/${gameId}/reviews`, review); }

@@ -10,6 +10,17 @@
     z-index: 100;
 }
 
+.review-form { display: grid; gap: 12px; margin: 14px 0 20px; }
+.review-form label { display: flex; align-items: center; gap: 10px; color: var(--color-text-muted); }
+.review-form select, .review-form textarea { background: var(--color-bg-panel); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 4px; padding: 10px; }
+.review-form textarea { min-height: 90px; resize: vertical; }
+.review-form button { justify-self: start; padding: 9px 14px; border: 0; border-radius: 4px; cursor: pointer; }
+.review-summary, .review-message { color: var(--color-text-muted); }
+.review-card { padding: 12px 0; border-top: 1px solid var(--color-border); }
+.review-card strong { margin-right: 12px; }
+.review-card span { color: #f5c518; }
+.review-card p { margin-bottom: 0; white-space: pre-wrap; }
+
 .modal-content {
     position: relative;
     width: 100%;

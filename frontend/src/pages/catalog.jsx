@@ -9,6 +9,11 @@ import {
     getFavorites,
     getGames,
     removeFavorite,
+    getCustomLists,
+    createCustomList,
+    addGameToList,
+    getCustomListGames,
+    removeGameFromList,
     searchGames,
     updateGame
 } from "../services/gameService";
@@ -65,6 +70,11 @@ function Catalog() {
     const [games, setGames] = useState([]);
     const [favorites, setFavorites] = useState([]);
     const [favoritesOpen, setFavoritesOpen] = useState(false);
+    const [customLists, setCustomLists] = useState([]);
+    const [listName, setListName] = useState("");
+    const [selectedList, setSelectedList] = useState("");
+    const [openList, setOpenList] = useState(null);
+    const [listGames, setListGames] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedGame, setSelectedGame] = useState(null);
     const [searchQuery, setSearchQuery] = useState("");
@@ -106,12 +116,53 @@ function Catalog() {
         }
     }
 
+    async function loadCustomLists() {
+        if (!user) { setCustomLists([]); return; }
+        try { setCustomLists(await getCustomLists()); } catch (error) { console.error("Error cargando listas:", error); }
+    }
+
+    async function handleCreateList(event) {
+        event.preventDefault();
+        if (!listName.trim()) return;
+        try {
+            await createCustomList(listName.trim());
+            setListName("");
+            await loadCustomLists();
+        } catch (error) { setErrorMessage(error.response?.data?.detail || "No se pudo crear la lista"); }
+    }
+
+    async function handleAddToList(game) {
+        if (!selectedList) { setErrorMessage("Crea o selecciona una lista primero."); return; }
+        try { await addGameToList(selectedList, game.id); setStatusMessage(`${game.name} agregado a la lista.`); await loadCustomLists(); }
+        catch (error) { setErrorMessage(error.response?.data?.detail || "No se pudo agregar el juego"); }
+    }
+
+    async function handleOpenList(list) {
+        if (openList === list.id) { setOpenList(null); return; }
+        setOpenList(list.id);
+        try { setListGames(await getCustomListGames(list.id)); }
+        catch (error) { setErrorMessage(error.response?.data?.detail || "No se pudo cargar la lista"); }
+    }
+
+    async function handleRemoveFromList(game) {
+        try {
+            await removeGameFromList(openList, game.id);
+            const list = customLists.find((item) => item.id === openList);
+            setListGames((items) => items.filter((item) => item.id !== game.id));
+            setCustomLists((items) => items.map((item) => item.id === openList
+                ? { ...item, game_ids: item.game_ids.filter((id) => id !== game.id) }
+                : item));
+            if (!list) await loadCustomLists();
+        } catch (error) { setErrorMessage(error.response?.data?.detail || "No se pudo quitar el juego de la lista"); }
+    }
+
     useEffect(() => {
         loadGames();
     }, []);
 
     useEffect(() => {
         loadFavorites();
+        loadCustomLists();
     }, [user]);
 
     const availableGenres = useMemo(() => {
@@ -373,6 +424,15 @@ function Catalog() {
                         >
                             {isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
                         </button>
+                        {customLists.length > 0 && (
+                            <>
+                                <select aria-label={`Lista para ${game.name}`} value={selectedList} onChange={(event) => setSelectedList(event.target.value)} onClick={(event) => event.stopPropagation()}>
+                                    <option value="">Elegir lista</option>
+                                    {customLists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
+                                </select>
+                                <button type="button" className="game-card__action" onClick={(event) => { event.stopPropagation(); handleAddToList(game); }}>Agregar a lista</button>
+                            </>
+                        )}
 
                         {isAdmin && (
                             <>
@@ -547,6 +607,22 @@ function Catalog() {
 
             {statusMessage && <p className="catalog-status">{statusMessage}</p>}
             {errorMessage && <p className="catalog-status catalog-status--error">{errorMessage}</p>}
+
+            <section className="catalog-section custom-lists">
+                <h2 className="catalog-section__title">Mis listas personalizadas</h2>
+                <form className="catalog-search" onSubmit={handleCreateList}>
+                    <input value={listName} maxLength={60} onChange={(event) => setListName(event.target.value)} placeholder="Nombre de la nueva lista" />
+                    <button type="submit">Crear lista</button>
+                </form>
+                {customLists.map((list) => (
+                    <section key={list.id} className="custom-list-row">
+                        <button type="button" className="catalog-section__toggle" onClick={() => handleOpenList(list)}>
+                            <h3 className="catalog-section__title">{list.name}<span className="catalog-section__count">{list.game_ids?.length || 0}</span></h3>
+                        </button>
+                        {openList === list.id && (listGames.length ? <div className="catalog-grid">{listGames.map((game) => <div key={game.id}>{renderGameCard(game)}<button type="button" className="game-card__action" onClick={() => handleRemoveFromList(game)}>Quitar de esta lista</button></div>)}</div> : <p className="catalog-empty">Esta lista aún no tiene juegos.</p>)}
+                    </section>
+                ))}
+            </section>
 
             {favorites.length > 0 && (
                 <section className="catalog-section catalog-section--collapsible">

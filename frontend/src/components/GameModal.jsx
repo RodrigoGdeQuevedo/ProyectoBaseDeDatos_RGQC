@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getGameMedia } from "../services/gameService";
+import { getGameMedia, getGameReviews, saveGameReview } from "../services/gameService";
 import { API_BASE_URL } from "../services/api";
 import "../styles/modal.css";
 
@@ -10,6 +10,26 @@ function GameModal({ game, onClose }) {
     const [videoError, setVideoError] = useState(false);
     const [lightboxIndex, setLightboxIndex] = useState(null);
     const [showDetailedDescription, setShowDetailedDescription] = useState(false);
+    const [reviewData, setReviewData] = useState({ reviews: [], average: null, count: 0 });
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState("");
+    const [reviewMessage, setReviewMessage] = useState("");
+
+    async function loadReviews() {
+        try { setReviewData(await getGameReviews(game.id)); }
+        catch (error) { console.error("Error cargando reseñas:", error); }
+    }
+
+    async function handleReviewSubmit(event) {
+        event.preventDefault();
+        setReviewMessage("");
+        try {
+            await saveGameReview(game.id, { rating: Number(rating), comment });
+            setComment("");
+            setReviewMessage("Tu reseña se guardó correctamente.");
+            await loadReviews();
+        } catch (error) { setReviewMessage(error.response?.data?.detail || "No se pudo guardar la reseña."); }
+    }
 
     useEffect(() => {
         let cancelled = false;
@@ -30,6 +50,8 @@ function GameModal({ game, onClose }) {
             cancelled = true;
         };
     }, [game.id]);
+
+    useEffect(() => { loadReviews(); }, [game.id]);
 
     const screenshots = media?.screenshots || [];
     const movies = media?.movies || [];
@@ -390,6 +412,29 @@ function GameModal({ game, onClose }) {
                         </div>
                     </div>
                 )}
+
+                <section className="modal-section review-section">
+                    <h3 className="modal-section-title">Reseñas de la comunidad</h3>
+                    <p className="review-summary">{reviewData.average ? `Promedio: ${reviewData.average}/5` : "Aún no hay calificaciones"} · {reviewData.count} reseñas</p>
+                    <form className="review-form" onSubmit={handleReviewSubmit}>
+                        <label>Tu calificación
+                            <select value={rating} onChange={(event) => setRating(event.target.value)}>
+                                {[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{value} / 5</option>)}
+                            </select>
+                        </label>
+                        <textarea value={comment} maxLength={1000} onChange={(event) => setComment(event.target.value)} placeholder="Escribe tu comentario sobre el juego" required />
+                        <button type="submit">Publicar reseña</button>
+                    </form>
+                    {reviewMessage && <p className="review-message">{reviewMessage}</p>}
+                    <div className="review-list">
+                        {reviewData.reviews.map((review) => (
+                            <article className="review-card" key={review.id}>
+                                <strong>{review.username}</strong><span>{"★".repeat(review.rating)} ({review.rating}/5)</span>
+                                <p>{review.comment}</p>
+                            </article>
+                        ))}
+                    </div>
+                </section>
             </div>
 
             {lightboxIndex !== null && screenshots.length > 0 && (

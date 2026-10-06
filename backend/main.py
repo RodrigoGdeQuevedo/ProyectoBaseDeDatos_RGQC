@@ -31,13 +31,14 @@ COLLECTION_NAME = "catalogo"
 
 MONGO_URI = os.getenv(
     "MONGO_URI",
-    "mongodb://rodrigogdeq:xbox14life@localhost:27017"
+    "mongodb://admin:test1234@localhost:27017/?authSource=admin"
 )
 
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 games_collection = db[COLLECTION_NAME]
 users_collection = db["users"]
+reviews_collection = db["reviews"]
 
 # Cache en memoria para multimedia de Steam (evita golpear la API en cada click)
 media_cache: Dict[int, dict] = {}
@@ -152,6 +153,15 @@ class Token(BaseModel):
 class GameCreate(BaseModel):
     steam_appid: int
     youtube_trailer_id: Optional[str] = None
+
+
+class CustomListCreate(BaseModel):
+    name: str
+
+
+class ReviewCreate(BaseModel):
+    rating: int
+    comment: str
 
 # ─────────────────────────────────────────────
 #  HELPERS
@@ -638,6 +648,7 @@ def register(user: UserRegister):
         "role": "user",
         "is_active": True,
         "favorites": [],
+        "custom_lists": [],
         "created_at": datetime.utcnow(),
         "last_login": None
     })
@@ -779,6 +790,84 @@ def remove_from_favorites(mongo_id: str, current_user=Depends(get_current_user))
     )
 
     return {"message": "Juego eliminado de favoritos"}
+
+@app.get("/users/me/lists")
+def get_custom_lists(current_user=Depends(get_current_user)):
+    return current_user.get("custom_lists", [])
+
+
+@app.post("/users/me/lists", status_code=201)
+def create_custom_list(payload: CustomListCreate, current_user=Depends(get_current_user)):
+    name = payload.name.strip()
+    if not name or len(name) > 60:
+        raise HTTPException(status_code=400, detail="El nombre debe tener entre 1 y 60 caracteres")
+    custom_list = {"id": str(ObjectId()), "name": name, "game_ids": []}
+    users_collection.update_one({"_id": current_user["_id"]}, {"$push": {"custom_lists": custom_list}})
+    return custom_list
+
+
+@app.get("/users/me/lists/{list_id}/games", response_model=List[Game])
+def get_custom_list_games(list_id: str, current_user=Depends(get_current_user)):
+    custom_list = next((item for item in current_user.get("custom_lists", []) if item.get("id") == list_id), None)
+    if custom_list is None:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    return fetch_games_by_ids(custom_list.get("game_ids", []))
+
+
+@app.post("/users/me/lists/{list_id}/games/{mongo_id}")
+def add_game_to_custom_list(list_id: str, mongo_id: str, current_user=Depends(get_current_user)):
+    if not games_collection.find_one({"_id": parse_id(mongo_id)}):
+        raise HTTPException(status_code=404, detail="Juego no encontrado")
+    if not any(item.get("id") == list_id for item in current_user.get("custom_lists", [])):
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    users_collection.update_one(
+        {"_id": current_user["_id"], "custom_lists.id": list_id},
+        {"$addToSet": {"custom_lists.$.game_ids": mongo_id}},
+    )
+    return {"message": "Juego agregado a la lista"}
+
+
+@app.delete("/users/me/lists/{list_id}/games/{mongo_id}")
+def remove_game_from_custom_list(list_id: str, mongo_id: str, current_user=Depends(get_current_user)):
+    if not any(item.get("id") == list_id for item in current_user.get("custom_lists", [])):
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    users_collection.update_one(
+        {"_id": current_user["_id"], "custom_lists.id": list_id},
+        {"$pull": {"custom_lists.$.game_ids": mongo_id}},
+    )
+    return {"message": "Juego eliminado de la lista"}
+
+
+@app.get("/games/{mongo_id}/reviews")
+def get_game_reviews(mongo_id: str, current_user=Depends(get_current_user)):
+    game_id = str(parse_id(mongo_id))
+    reviews = list(reviews_collection.find({"game_id": game_id}).sort("updated_at", -1))
+    for review in reviews:
+        review["id"] = str(review.pop("_id"))
+        review.pop("user_id", None)
+    average = round(sum(review["rating"] for review in reviews) / len(reviews), 1) if reviews else None
+    return {"reviews": reviews, "average": average, "count": len(reviews)}
+
+
+@app.put("/games/{mongo_id}/reviews")
+def save_game_review(mongo_id: str, payload: ReviewCreate, current_user=Depends(get_current_user)):
+    game_id = str(parse_id(mongo_id))
+    if not games_collection.find_one({"_id": ObjectId(game_id)}):
+        raise HTTPException(status_code=404, detail="Juego no encontrado")
+    comment = payload.comment.strip()
+    if payload.rating < 1 or payload.rating > 5:
+        raise HTTPException(status_code=400, detail="La calificación debe ser de 1 a 5")
+    if not comment or len(comment) > 1000:
+        raise HTTPException(status_code=400, detail="El comentario debe tener entre 1 y 1000 caracteres")
+    reviews_collection.update_one(
+        {"game_id": game_id, "user_id": str(current_user["_id"])},
+        {"$set": {"game_id": game_id, "user_id": str(current_user["_id"]),
+                  "username": current_user["username"], "rating": payload.rating,
+                  "comment": comment, "updated_at": datetime.utcnow()}},
+        upsert=True,
+    )
+    return {"message": "Reseña guardada"}
+
 
 ALLOWED_VIDEO_SUFFIXES = (
     ".akamaihd.net",
