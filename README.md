@@ -1,4 +1,4 @@
-﻿# Steam Catalog
+# Steam Catalog
 
 Aplicación web para explorar un catálogo de juegos de Steam, buscar juegos por contenido, guardar favoritos y crear listas personales. Los usuarios pueden publicar una calificación y un comentario por juego. Los administradores pueden importar juegos y mantener el catálogo.
 
@@ -8,52 +8,103 @@ Aplicación web para explorar un catálogo de juegos de Steam, buscar juegos por
 - Python 3.12 o superior.
 - Node.js compatible con Vite 8 y npm.
 
-## Cómo iniciar el proyecto
+## Cómo iniciar el proyecto paso a paso
 
-Abre tres terminales desde la carpeta raíz del repositorio.
+Los siguientes pasos están escritos para **Windows PowerShell**. Mantén abiertas
+dos terminales: una para el backend y otra para el frontend. Antes de empezar,
+abre Docker Desktop y espera a que indique que está funcionando.
 
-### 1. Iniciar las bases de datos
+### 1. Abrir la carpeta del proyecto
+
+En PowerShell, sitúate en la carpeta raíz del repositorio:
+
+```powershell
+cd "C:\Users\carlo\OneDrive\Escritorio\proyecto_UX\ProyectoBaseDeDatos_RGQC"
+```
+
+### 2. Iniciar MongoDB y ChromaDB
+
+Desde la carpeta raíz, ejecuta:
 
 ```powershell
 docker compose up -d
+docker compose ps
 ```
 
-Esto inicia MongoDB en `localhost:27017` y ChromaDB en `localhost:8000`. Para detenerlos: `docker compose down`. Los datos se conservan en volúmenes de Docker.
-
-### 2. Instalar e iniciar el backend
-
-En la primera terminal:
+Los servicios deben aparecer como `running`. MongoDB queda disponible en
+`localhost:27017` y ChromaDB en `localhost:8000`. Los datos se conservan en
+volúmenes de Docker. Para detenerlos al terminar:
 
 ```powershell
-cd backend
+docker compose down
+```
+
+### 3. Preparar e iniciar el backend
+
+En la primera terminal, ejecuta:
+
+```powershell
+cd "C:\Users\carlo\OneDrive\Escritorio\proyecto_UX\ProyectoBaseDeDatos_RGQC\backend"
 py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install fastapi "uvicorn[standard]" pymongo chromadb requests "passlib[bcrypt]" "bcrypt<4.1" "python-jose[cryptography]" email-validator python-multipart beautifulsoup4
-$env:MONGO_URI = "mongodb://admin:test1234@localhost:27017/?authSource=admin"
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+$env:MONGO_URI = "mongodb://admin:test1234@localhost:27017/juegos?authSource=admin"
 $env:JWT_SECRET_KEY = "clave-local-para-desarrollo"
-uvicorn main:app --reload --host 0.0.0.0 --port 8080
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-La API queda disponible en `http://localhost:8080`; la documentación interactiva está en `http://localhost:8080/docs`. La primera ejecución de ChromaDB puede tardar mientras crea el índice semántico.
-
-Si el catálogo está vacío, con el backend detenido ejecuta desde `backend` para cargar en MongoDB los juegos de `validos.json` usando sus fichas públicas de Steam. Después vuelve a iniciar el backend para indexarlos en ChromaDB:
+Si PowerShell bloquea la activación del entorno virtual, ejecuta una vez:
 
 ```powershell
-$env:MONGO_URI = "mongodb://admin:test1234@localhost:27017/?authSource=admin"
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Después repite la activación con `.\.venv\Scripts\Activate.ps1`. La API queda
+disponible en `http://localhost:8080`, y su documentación en
+`http://localhost:8080/docs`. Comprueba el estado en
+`http://localhost:8080/health`; debe mostrar MongoDB como `connected`.
+
+Si el catálogo está vacío, detén el backend con `Ctrl+C` y, desde la carpeta
+`backend`, carga los juegos iniciales:
+
+```powershell
+$env:MONGO_URI = "mongodb://admin:test1234@localhost:27017/juegos?authSource=admin"
 python cargar_catalogo_inicial.py
 ```
 
-### 3. Instalar e iniciar el frontend
+Cuando termine, inicia nuevamente el backend con el comando anterior.
 
-En otra terminal:
+### 4. Preparar e iniciar el frontend
+
+En una segunda terminal, ejecuta:
 
 ```powershell
-cd frontend
+cd "C:\Users\carlo\OneDrive\Escritorio\proyecto_UX\ProyectoBaseDeDatos_RGQC\frontend"
 npm ci
-npm run dev
+npm run dev -- --host 0.0.0.0
 ```
 
-Abre la dirección que Vite muestra en la terminal, normalmente `http://localhost:5173`.
+Abre `http://localhost:5173` en el navegador. Vite también mostrará la URL
+local y las URLs de red disponibles.
+
+### 5. Detener la aplicación
+
+En cada terminal presiona `Ctrl+C` para detener el backend y el frontend.
+Después, si ya no necesitas las bases de datos, ejecuta desde la carpeta raíz:
+
+```powershell
+docker compose down
+```
+
+### Solución rápida de problemas
+
+- Si `docker compose` falla, abre Docker Desktop y vuelve a ejecutar el paso 2.
+- Si el puerto `8080` está ocupado, detén el proceso que lo usa o cambia
+  `--port 8080` por otro puerto y actualiza la URL de la API en el frontend.
+- Si el puerto `5173` está ocupado, Vite elegirá otro puerto; abre la URL que
+  aparezca en la terminal.
+- Si faltan paquetes del backend, activa `.venv` y ejecuta nuevamente
+  `python -m pip install -e .`.
 
 ## Uso paso a paso
 
