@@ -43,6 +43,56 @@ function getCommunityLists(catalog) {
     });
 }
 
+function normalizeTerms(values) {
+    const items = Array.isArray(values)
+        ? values
+        : values && typeof values === "object"
+            ? Object.entries(values).filter(([, enabled]) => enabled).map(([name]) => name)
+            : values ? [values] : [];
+
+    return new Set(items.map((item) => {
+        const value = typeof item === "string" || typeof item === "number"
+            ? item
+            : item?.description || item?.name || item?.slug || "";
+        return String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    }).filter(Boolean));
+}
+
+function gameSimilarityScore(source, candidate) {
+    const fields = [
+        ["genres", 5],
+        ["tags", 3],
+        ["categories", 1.5],
+        ["developers", 1],
+        ["platforms", 0.75],
+        ["type", 0.5],
+    ];
+
+    return fields.reduce((total, [field, weight]) => {
+        const sourceTerms = normalizeTerms(source[field]);
+        const candidateTerms = normalizeTerms(candidate[field]);
+        if (!sourceTerms.size || !candidateTerms.size) return total;
+        const shared = [...sourceTerms].filter((term) => candidateTerms.has(term)).length;
+        const union = new Set([...sourceTerms, ...candidateTerms]).size;
+        return total + (shared / union) * weight;
+    }, 0);
+}
+
+function getSimilarGames(game, catalog, limit = 4) {
+    if (!game) return [];
+    return catalog
+        .filter((candidate) => String(candidate.id) !== String(game.id))
+        .map((candidate) => ({
+            game: candidate,
+            score: gameSimilarityScore(game, candidate),
+            popularity: candidate.metacritic?.score || 0,
+        }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score || b.popularity - a.popularity)
+        .slice(0, limit)
+        .map(({ game: candidate }) => candidate);
+}
+
 function getMockGameReviews(game) {
     const genre = game.genres?.[0]?.description?.toLowerCase() || "this game";
     return [
@@ -313,7 +363,7 @@ export function GameDetail() {
     }, [gameId]);
     useEffect(() => { getFavorites().then((items) => setIsFavorite(items.some((item) => String(item.id) === String(gameId)))).catch(() => setIsFavorite(false)); }, [gameId]);
     const isCompleted = completed.includes(gameId);
-    const similar = useMemo(() => game ? games.filter((item) => item.id !== game.id && item.genres?.some((genre) => game.genres?.some((own) => own.description === genre.description))).slice(0, 4) : [], [games, game]);
+    const similar = useMemo(() => getSimilarGames(game, games), [games, game]);
     function toggleCompleted() { const next = isCompleted ? completed.filter((id) => id !== gameId) : [...completed, gameId]; setCompleted(next); localStorage.setItem("completedGames", JSON.stringify(next)); }
     async function toggleFavorite() {
         try {
