@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
+@import "tailwindcss";
 
 :root {
     --color-bg: #171a21;
@@ -27,11 +28,16 @@ html,body,#root{
     min-height:100vh;
 }
 
+#root{
+    position:relative;
+    z-index:1;
+}
+
 body{
     background: var(--color-bg);
     font-family: var(--font-body);
     color:white;
-    font-family:Segoe UI,Arial,sans-serif;
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
 
 a{

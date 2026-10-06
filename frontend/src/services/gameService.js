@@ -5,6 +5,11 @@ export async function getGames() {
     return response.data;
 }
 
+export async function getGame(id) {
+    const response = await api.get(`/games/mongo_id/${id}`);
+    return response.data;
+}
+
 export async function searchGames(query) {
     const response = await api.get("/games/search", {
         params: { q: query }
